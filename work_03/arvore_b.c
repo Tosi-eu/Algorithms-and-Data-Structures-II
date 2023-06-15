@@ -15,11 +15,22 @@ No *criar_no() {
 }
 
 int buscar_chave(No *no, int id) {
-  int i = 0;
-  while (i < no->num_chaves && id > no->livros[i].id) {
-    i++;
+  int esquerda = 0;
+  int direita = no->num_chaves - 1;
+
+  while (esquerda <= direita) {
+    int meio = (esquerda + direita) / 2;
+
+    if (no->livros[meio].id == id) {
+      return meio; // Chave encontrada
+    } else if (no->livros[meio].id < id) {
+      esquerda = meio + 1; // Buscar na metade direita
+    } else {
+      direita = meio - 1; // Buscar na metade esquerda
+    }
   }
-  return i;
+
+  return esquerda; // Chave não encontrada, retorna o índice onde deveria estar
 }
 
 void inserir_chave(No *no, Livro livro) {
@@ -45,27 +56,64 @@ void dividir_no(No *pai, int indice, No *filho) {
   No *novo_filho = criar_no();
   novo_filho->folha = filho->folha;
 
-  for (int i = 0; i < MAX_KEYS / 2; i++) {
-    novo_filho->livros[i] = filho->livros[i + MAX_KEYS / 2];
-    novo_filho->num_chaves++;
-  }
-
-  if (!filho->folha) {
-    for (int i = 0; i < MAX_CHILDREN / 2; i++) {
-      novo_filho->filhos[i] = filho->filhos[i + MAX_CHILDREN / 2];
+  int i;
+  if (indice < MAX_KEYS / 2) {
+    // Redistribuição para a esquerda
+    for (i = 0; i < MAX_KEYS / 2 - 1; i++) {
+      novo_filho->livros[i] = filho->livros[i + MAX_KEYS / 2 + 1];
+      novo_filho->num_chaves++;
     }
-  }
 
-  filho->num_chaves = MAX_KEYS / 2;
-
-  inserir_filho(pai, novo_filho, indice);
-  inserir_chave(pai, filho->livros[MAX_KEYS / 2]);
-
-  filho->num_chaves--;
-  for (int i = MAX_KEYS / 2; i < MAX_KEYS; i++) {
     if (!filho->folha) {
-      filho->filhos[i + 1] = NULL;
+      for (i = 0; i < MAX_CHILDREN / 2; i++) {
+        novo_filho->filhos[i] = filho->filhos[i + MAX_CHILDREN / 2 + 1];
+      }
     }
+
+    novo_filho->filhos[novo_filho->num_chaves] =
+        filho->filhos[MAX_CHILDREN - 1];
+
+    filho->num_chaves = MAX_KEYS / 2 - 1;
+
+    for (i = pai->num_chaves; i > indice; i--) {
+      pai->filhos[i + 1] = pai->filhos[i];
+    }
+    pai->filhos[indice + 1] = novo_filho;
+    pai->filhos[indice] = filho;
+
+    for (i = pai->num_chaves - 1; i >= indice; i--) {
+      pai->livros[i + 1] = pai->livros[i];
+    }
+    pai->livros[indice] = filho->livros[MAX_KEYS / 2];
+    pai->num_chaves++;
+  } else {
+    // Redistribuição para a direita
+    for (i = 0; i < MAX_KEYS / 2 - 1; i++) {
+      novo_filho->livros[i] = filho->livros[i + MAX_KEYS / 2 + 2];
+      novo_filho->num_chaves++;
+    }
+
+    if (!filho->folha) {
+      for (i = 0; i < MAX_CHILDREN / 2; i++) {
+        novo_filho->filhos[i] = filho->filhos[i + MAX_CHILDREN / 2 + 2];
+      }
+    }
+
+    novo_filho->filhos[novo_filho->num_chaves] =
+        filho->filhos[MAX_CHILDREN - 1];
+
+    filho->num_chaves = MAX_KEYS / 2;
+
+    for (i = pai->num_chaves; i > indice + 1; i--) {
+      pai->filhos[i + 1] = pai->filhos[i];
+    }
+    pai->filhos[indice + 1] = novo_filho;
+
+    for (i = pai->num_chaves - 1; i >= indice + 1; i--) {
+      pai->livros[i + 1] = pai->livros[i];
+    }
+    pai->livros[indice + 1] = filho->livros[MAX_KEYS / 2 + 1];
+    pai->num_chaves++;
   }
 }
 
@@ -91,6 +139,27 @@ void inserir(No **raiz, Livro livro) {
       dividir_no(no_pai, indice, no_pai->filhos[indice]);
     }
   }
+
+  // Atualizar arquivos de dado e índice após a inserção
+  FILE *arquivo_dados = fopen("dados.bin", "wb+");
+  FILE *arquivo_indice = fopen("indice.bin", "wb+");
+
+  if (arquivo_dados == NULL || arquivo_indice == NULL) {
+    return;
+  }
+
+  // Escrever o livro no arquivo de dados
+  fwrite(&livro, sizeof(Livro), 1, arquivo_dados);
+
+  // Escrever o índice no arquivo de índice
+  int id = livro.id;
+  fwrite(&id, sizeof(int), 1, arquivo_indice);
+  long posicao = ftell(arquivo_dados) - sizeof(Livro);
+  fwrite(&posicao, sizeof(long), 1, arquivo_indice);
+
+  // Fechar os arquivos
+  fclose(arquivo_dados);
+  fclose(arquivo_indice);
 }
 
 No *buscar(No *raiz, int id) {
